@@ -116,6 +116,7 @@
                     <div>
                         <h2 class="text-lg font-extrabold text-purple-900">برنامه‌ریزی ۳ مرحله‌ای روزانه</h2>
                         <p class="text-xs text-slate-500 mt-0.5">۱. تخلیه ذهنی  اولویت‌بندی  زمان‌بندی دقیق و شروع پومودورو</p>
+                        <p class="text-[11px] text-indigo-700 mt-2 font-bold">زمان رسمی برنامه: تهران (Asia/Tehran) — <span id="tehranClock">در حال دریافت زمان...</span></p>
                     </div>
                     <div class="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-5 py-2.5 rounded-2xl shadow-md text-center">
                         <span class="block text-[10px] opacity-90">مجموع زمان مطالعه امروز:</span>
@@ -173,8 +174,9 @@
         <!-- ================= تب ۳: برنامه هفتگی ================= -->
         <div id="tab-weekly" class="hidden">
             <section class="glass-card rounded-3xl p-6 shadow-xl">
-                <h2 class="text-lg font-extrabold text-purple-900 mb-4">🗓️ برنامه‌ریزی هفتگی</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="weeklyGrid"></div>
+                <h2 class="text-lg font-extrabold text-purple-900 mb-2">🗓️ برنامه‌ریزی هفتگی سه‌مرحله‌ای</h2>
+                <p class="text-xs text-slate-500 mb-4">برای هر روز: ۱. ثبت همه کارها  ۲. تعیین اولویت  ۳. زمان‌بندی و مشخص‌کردن نوع فعالیت</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="weeklyGrid"></div>
             </section>
         </div>
 
@@ -182,8 +184,12 @@
         <div id="tab-monthly" class="hidden">
             <section class="glass-card rounded-3xl p-6 shadow-xl max-w-2xl mx-auto">
                 <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-base font-extrabold text-purple-900" id="calendarMonthYear">شهریور ۱۴۰۵</h2>
-                    <span class="text-xs bg-purple-100 text-purple-800 font-bold px-3 py-1 rounded-full">تقویم ماهانه</span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="changeCalendarMonth(-1)" aria-label="ماه قبل" class="w-9 h-9 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 font-black">›</button>
+                        <h2 class="text-base font-extrabold text-purple-900" id="calendarMonthYear">در حال بارگذاری تقویم…</h2>
+                        <button type="button" onclick="changeCalendarMonth(1)" aria-label="ماه بعد" class="w-9 h-9 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 font-black">‹</button>
+                    </div>
+                    <span class="text-xs bg-purple-100 text-purple-800 font-bold px-3 py-1 rounded-full">تقویم شمسی</span>
                 </div>
                 <div class="grid grid-cols-7 gap-1 text-center text-xs font-bold text-purple-700 mb-2">
                     <span>ش</span><span>ی</span><span>د</span><span>س</span><span>چ</span><span>پ</span><span>ج</span>
@@ -259,6 +265,42 @@
             habits: [],
             weeklyPlans: { 'شنبه': '', 'یکشنبه': '', 'دوشنبه': '', 'سه‌شنبه': '', 'چهارشنبه': '', 'پنج‌شنبه': '', 'جمعه': '' }
         };
+
+        // همه محاسبات روز و تقویم بر اساس منطقه زمانی رسمی تهران انجام می‌شوند.
+        const TEHRAN_TZ = 'Asia/Tehran';
+        function tehranNow() {
+            return new Date(new Date().toLocaleString('en-US', { timeZone: TEHRAN_TZ }));
+        }
+        function tehranDateKey(date = new Date()) {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: TEHRAN_TZ, year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(date);
+            const p = Object.fromEntries(parts.filter(x => x.type !== 'literal').map(x => [x.type, x.value]));
+            return `${p.year}-${p.month}-${p.day}`;
+        }
+        function normalizePlannerData() {
+            const today = tehranDateKey();
+            if (db.dailyPlanDate !== today) {
+                db.dailyTasks = [];
+                db.dailyPlanDate = today;
+            }
+            const days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
+            db.weeklyPlans = db.weeklyPlans && typeof db.weeklyPlans === 'object' ? db.weeklyPlans : {};
+            days.forEach(day => {
+                const old = db.weeklyPlans[day];
+                const items = Array.isArray(old) ? old : (old && String(old).trim()
+                    ? [{ text: String(old) }] : []);
+                db.weeklyPlans[day] = items.filter(item => item && typeof item === 'object').map((item, index) => ({
+                    id: Number.isFinite(Number(item.id)) ? Number(item.id) : (Date.now() + index + Math.floor(Math.random() * 100000)),
+                    text: String(item.text ?? '').trim(),
+                    priority: ['زیاد', 'متوسط', 'کم'].includes(item.priority) ? item.priority : 'متوسط',
+                    time: Math.min(1440, Math.max(5, Number(item.time) || 45)),
+                    isStudy: item.isStudy !== false && item.isStudy !== 'false',
+                    done: item.done === true
+                })).filter(item => item.text);
+            });
+        }
+        normalizePlannerData();
 
         function saveDB() {
             localStorage.setItem('fantasyPlannerDB_v2', JSON.stringify(db));
@@ -473,30 +515,181 @@
             });
         }
 
-        // برنامه هفتگی
+        // برنامه‌ریزی هفتگی؛ ساختار سه‌مرحله‌ای هم‌راستا با برنامه روزانه
+        function addWeeklyTask(day) {
+            const input = document.getElementById(`weekly-input-${day}`);
+            if (!input || !input.value.trim() || !Array.isArray(db.weeklyPlans[day])) return;
+            db.weeklyPlans[day].push({
+                id: Date.now() + Math.floor(Math.random() * 100000),
+                text: input.value.trim(), priority: 'متوسط', time: 45, isStudy: true, done: false
+            });
+            input.value = '';
+            saveDB();
+            renderWeekly();
+        }
+
+        function updateWeeklyTask(day, id, field, value) {
+            const tasks = db.weeklyPlans[day];
+            if (!Array.isArray(tasks)) return;
+            const task = tasks.find(item => Number(item.id) === Number(id));
+            if (!task) return;
+            if (field === 'time') task.time = Math.min(1440, Math.max(5, Number(value) || 5));
+            else if (field === 'done' || field === 'isStudy') task[field] = value === true || value === 'true';
+            else if (field === 'priority' && ['زیاد', 'متوسط', 'کم'].includes(value)) task.priority = value;
+            saveDB();
+            renderWeekly();
+        }
+
+        function removeWeeklyTask(day, id) {
+            if (!Array.isArray(db.weeklyPlans[day])) return;
+            db.weeklyPlans[day] = db.weeklyPlans[day].filter(task => Number(task.id) !== Number(id));
+            saveDB();
+            renderWeekly();
+        }
+
         function renderWeekly() {
             const grid = document.getElementById('weeklyGrid');
+            if (!grid) return;
             grid.innerHTML = '';
-            Object.keys(db.weeklyPlans).forEach(day => {
+            const days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
+            days.forEach(day => {
+                const tasks = Array.isArray(db.weeklyPlans[day]) ? db.weeklyPlans[day] : [];
                 const card = document.createElement('div');
                 card.className = 'bg-white/70 border border-purple-200 rounded-2xl p-3 shadow-xs';
+                const rows = tasks.map(task => {
+                    const priorityClass = task.priority === 'زیاد' ? 'bg-rose-100 text-rose-700' :
+                        task.priority === 'کم' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
+                    return `
+                    <div class="border border-purple-100 rounded-xl p-3 mb-2 bg-white ${task.done ? 'opacity-60' : ''}">
+                        <div class="flex items-center gap-2 mb-3">
+                            <input type="checkbox" ${task.done ? 'checked' : ''} onchange="updateWeeklyTask('${day}', ${Number(task.id)}, 'done', this.checked)" class="accent-purple-600 w-4 h-4" aria-label="انجام شد">
+                            <span class="text-xs font-bold flex-1 ${task.done ? 'line-through text-slate-400' : 'text-slate-800'}">${escapeHTML(task.text)}</span>
+                            <button onclick="removeWeeklyTask('${day}', ${Number(task.id)})" class="text-rose-500 hover:text-rose-700 font-bold px-2" aria-label="حذف فعالیت">حذف</button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                            <label class="font-bold text-purple-800">مرحله ۲: اولویت
+                                <select onchange="updateWeeklyTask('${day}', ${Number(task.id)}, 'priority', this.value)" class="w-full mt-1 border border-purple-200 rounded-lg p-2 bg-purple-50 ${priorityClass}">
+                                    <option value="زیاد" ${task.priority === 'زیاد' ? 'selected' : ''}>🔴 زیاد</option>
+                                    <option value="متوسط" ${task.priority === 'متوسط' ? 'selected' : ''}>🟡 متوسط</option>
+                                    <option value="کم" ${task.priority === 'کم' ? 'selected' : ''}>🟢 کم</option>
+                                </select>
+                            </label>
+                            <label class="font-bold text-purple-800">مرحله ۳: زمان (دقیقه)
+                                <input type="number" min="5" max="1440" value="${task.time || 45}" onchange="updateWeeklyTask('${day}', ${Number(task.id)}, 'time', this.value)" class="w-full mt-1 border border-purple-200 rounded-lg p-2 text-center">
+                            </label>
+                            <label class="font-bold text-purple-800">نوع فعالیت
+                                <select onchange="updateWeeklyTask('${day}', ${Number(task.id)}, 'isStudy', this.value)" class="w-full mt-1 border border-purple-200 rounded-lg p-2 bg-purple-50">
+                                    <option value="true" ${task.isStudy ? 'selected' : ''}>📚 مطالعه</option>
+                                    <option value="false" ${!task.isStudy ? 'selected' : ''}>🌿 شخصی</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>`;
+                }).join('');
                 card.innerHTML = `
-                    <h3 class="text-xs font-bold text-purple-900 mb-2">${day}</h3>
-                    <textarea oninput="db.weeklyPlans['${day}'] = this.value; saveDB();" placeholder="هدف و برنامه‌..." class="w-full h-24 bg-white border border-purple-100 rounded-xl p-2 text-xs focus:outline-none resize-none">${db.weeklyPlans[day] || ''}</textarea>
-                `;
+                    <h3 class="text-sm font-extrabold text-purple-900 mb-3">${day}</h3>
+                    <div class="mb-3 p-3 bg-purple-50 rounded-xl border border-purple-100">
+                        <label for="weekly-input-${day}" class="block text-[11px] font-bold text-purple-800 mb-2">مرحله ۱: تخلیه ذهنی (ثبت همه فعالیت‌ها)</label>
+                        <div class="flex gap-2">
+                            <input id="weekly-input-${day}" type="text" placeholder="فعالیت این روز..." class="min-w-0 flex-1 bg-white border border-purple-200 rounded-lg px-2 py-2 text-xs" onkeydown="if(event.key==='Enter') addWeeklyTask('${day}')">
+                            <button onclick="addWeeklyTask('${day}')" class="bg-purple-700 hover:bg-purple-800 text-white rounded-lg px-3 text-xs font-bold">افزودن</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-[11px] font-bold text-purple-800 mb-2">مرحله ۲ و ۳: اولویت‌بندی و زمان‌بندی</div>
+                        ${rows || '<p class="text-[11px] text-slate-400 text-center py-3">هنوز فعالیتی ثبت نشده است.</p>'}
+                    </div>`;
                 grid.appendChild(card);
             });
         }
+        function escapeHTML(value) {
+            return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+        }
 
-        // تقویم
+        // تقویم شمسی پویا؛ تاریخ‌ها از ساعت و تقویم محلی دستگاه خوانده می‌شوند.
+        const persianCalendarFormatter = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+            year: 'numeric', month: 'long', day: 'numeric'
+        });
+        const persianPartsFormatter = new Intl.DateTimeFormat('en-US-u-ca-persian', {
+            year: 'numeric', month: 'numeric', day: 'numeric'
+        });
+        let calendarViewDate = tehranNow();
+        let selectedCalendarDate = null;
+
+        function getPersianParts(date) {
+            const parts = persianPartsFormatter.formatToParts(date);
+            const result = {};
+            for (const part of parts) {
+                if (part.type === 'year' || part.type === 'month' || part.type === 'day') {
+                    result[part.type] = Number(part.value);
+                }
+            }
+            return result;
+        }
+
+        // calendarViewDate و selectedCalendarDate نماینده تاریخِ دیواری تهران در زمان محلی مرورگرند.
+        function localDateKey(date) {
+            return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+        }
+
+        function changeCalendarMonth(direction) {
+            const current = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth(), calendarViewDate.getDate());
+            const currentParts = getPersianParts(current);
+            let probe = new Date(current);
+            for (let i = 0; i < 40; i++) {
+                probe.setDate(probe.getDate() + (direction < 0 ? -1 : 1));
+                const p = getPersianParts(probe);
+                if (p.year !== currentParts.year || p.month !== currentParts.month) break;
+            }
+            while (getPersianParts(probe).day > 1) probe.setDate(probe.getDate() - 1);
+            calendarViewDate = probe;
+            renderCalendar();
+        }
+
         function renderCalendar() {
             const grid = document.getElementById('calendarGrid');
+            const title = document.getElementById('calendarMonthYear');
             grid.innerHTML = '';
-            for(let i = 1; i <= 31; i++) {
-                const d = document.createElement('div');
-                d.className = `py-2 rounded-xl text-center font-bold text-xs cursor-pointer ${i === 12 ? 'bg-purple-600 text-white' : 'bg-white/60 hover:bg-purple-100'}`;
-                d.innerText = i;
-                grid.appendChild(d);
+            const viewParts = getPersianParts(calendarViewDate);
+            title.textContent = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+                year: 'numeric', month: 'long'
+            }).format(calendarViewDate);
+
+            const firstDay = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth(), calendarViewDate.getDate());
+            while (getPersianParts(firstDay).day !== 1) firstDay.setDate(firstDay.getDate() - 1);
+
+            const cursor = new Date(firstDay);
+            const todayKey = tehranDateKey();
+            const selectedKey = selectedCalendarDate ? localDateKey(selectedCalendarDate) : null;
+            const firstWeekday = (firstDay.getDay() + 1) % 7; // شنبه = ستون اول
+
+            for (let blank = 0; blank < firstWeekday; blank++) {
+                const empty = document.createElement('div');
+                empty.setAttribute('aria-hidden', 'true');
+                grid.appendChild(empty);
+            }
+
+            for (let day = 1; day <= 31; day++) {
+                const parts = getPersianParts(cursor);
+                if (parts.year !== viewParts.year || parts.month !== viewParts.month) break;
+                const cell = document.createElement('button');
+                cell.type = 'button';
+                const key = localDateKey(cursor);
+                const isToday = key === todayKey;
+                const isSelected = key === selectedKey;
+                cell.className = 'py-2 rounded-xl text-center font-bold text-xs transition ' +
+                    (isSelected ? 'bg-indigo-700 text-white ring-2 ring-indigo-300' :
+                    isToday ? 'bg-purple-600 text-white ring-2 ring-purple-300' :
+                    'bg-white/70 hover:bg-purple-100 text-slate-800');
+                cell.textContent = new Intl.NumberFormat('fa-IR').format(parts.day);
+                cell.title = persianCalendarFormatter.format(cursor);
+                cell.setAttribute('aria-label', persianCalendarFormatter.format(cursor));
+                cell.addEventListener('click', () => {
+                    selectedCalendarDate = new Date(cursor);
+                    renderCalendar();
+                });
+                grid.appendChild(cell);
+                cursor.setDate(cursor.getDate() + 1);
             }
         }
 
@@ -584,7 +777,28 @@
             });
         }
 
+        // ساعت زنده تهران و نوسازی خودکار برنامه روزانه در شروع روز جدید تهران
+        function refreshTehranClock() {
+            const now = new Date();
+            const clock = document.getElementById('tehranClock');
+            if (clock) clock.textContent = new Intl.DateTimeFormat('fa-IR', {
+                timeZone: TEHRAN_TZ, dateStyle: 'full', timeStyle: 'short'
+            }).format(now);
+            const today = tehranDateKey(now);
+            if (db.dailyPlanDate !== today) {
+                db.dailyTasks = [];
+                db.dailyPlanDate = today;
+                saveDB();
+                renderDailyTasks();
+                calendarViewDate = tehranNow();
+                renderCalendar();
+            }
+        }
+        setInterval(refreshTehranClock, 15000);
+
         // راه‌اندازی برنامه
+        saveDB();
+        refreshTehranClock();
         initSleep();
         renderDailyTasks();
         renderHabits();
